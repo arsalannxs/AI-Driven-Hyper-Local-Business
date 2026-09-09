@@ -1,0 +1,6 @@
+{
+  "name": "Rural Micro-Enterprise Advisor",
+  "description": "AI-driven hyper-local business advisory and financial structuring assistant with offline-first functionality and multi-language voice support for rural micro-entrepreneurs.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
