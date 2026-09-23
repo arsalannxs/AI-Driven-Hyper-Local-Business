@@ -1,6 +1,93 @@
-export type TradeType = 'dairy' | 'farming' | 'kirana' | 'handloom' | 'poultry' | 'workshop';
+export type TradeType = 'dairy' | 'farming' | 'kirana' | 'handloom' | 'poultry' | 'workshop' | 'retail' | 'textiles' | 'foodtech';
 
 export type LanguageCode = 'hi' | 'en' | 'bn' | 'te' | 'mr' | 'ta' | 'es' | 'sw';
+
+export interface LocationInput {
+  village: string;
+  block: string;
+  district: string;
+  state: string;
+}
+
+export interface FeasibilityReport {
+  id: string;
+  location: LocationInput;
+  category: string;
+  categoryName: string;
+  availableMargin: number;
+  feasibleProjectCost: number;
+  maxLoanAmount: number;
+  marketReach: {
+    consumerBaseEstimate: string;
+    radiusKm: number;
+    primaryChannels: string[];
+    populationDemographics: string;
+  };
+  opportunityAnalysis: {
+    underservedNiches: string[];
+    highMarginSegments: string[];
+    valueAdditionPotential: string;
+  };
+  swot: {
+    strengths: string[];
+    weaknesses: string[];
+    opportunities: string[];
+    threats: string[];
+  };
+  threatsIdentification: {
+    supplyChainBottlenecks: string[];
+    seasonalFluctuations: string[];
+    singleBuyerDependency: string;
+    mitigationStrategies: string[];
+  };
+  competitorMapping: {
+    estimatedCompetitorDensity: string;
+    competitorsCountEstimate: number;
+    competitiveAdvantageAdvice: string;
+  };
+  productMarketValue: {
+    optimalPricingStrategy: string;
+    benchmarkSellingPrice: string;
+    regionalPurchasingPowerEstimate: string;
+    breakEvenTimeline: string;
+  };
+  executiveSummary: string;
+  generatedDate: string;
+}
+
+export interface AmortizationScheduleItem {
+  period: number;
+  periodLabel: string;
+  phase: 'moratorium' | 'repayment';
+  principal: number;
+  interest: number;
+  totalInstallment: number;
+  balance: number;
+}
+
+export interface FinancialStructuringResult {
+  availableMargin: number;
+  totalProjectCost: number;
+  maxLoanAmount: number;
+  marginPercentage: number;
+  loanPercentage: number;
+  selectedScheme: 'micro_finance' | 'term_loan';
+  schemeName: string;
+  schemeAuthority: string;
+  interestRatePerAnnum: number;
+  tenureYears: number;
+  tenureMonths: number;
+  moratoriumMonths: number;
+  activeRepaymentMonths: number;
+  monthlyEmiPostMoratorium: number;
+  quarterlyRepaymentPostMoratorium: number;
+  totalRepayment: number;
+  totalInterest: number;
+  workingCapitalRequirement: number;
+  operationalCostEstimate: number;
+  schedule: AmortizationScheduleItem[];
+  savingsVsInformalLender: number;
+}
 
 export interface Enterprise {
   id: string;

@@ -21,10 +21,12 @@ export const EnterpriseProfileModal: React.FC<EnterpriseProfileModalProps> = ({
   language,
 }) => {
   const [formData, setFormData] = useState<Enterprise>({ ...enterprise });
-  const [isEditing, setIsEditing] = useState(false);
 
   const trades: TradeType[] = [
     'dairy',
+    'retail',
+    'textiles',
+    'foodtech',
     'farming',
     'kirana',
     'handloom',
@@ -32,11 +34,14 @@ export const EnterpriseProfileModal: React.FC<EnterpriseProfileModalProps> = ({
     'workshop',
   ];
 
-  const tradeIcons: Record<TradeType, string> = {
+  const tradeIcons: Record<string, string> = {
     dairy: '🥛',
-    farming: '🌾',
-    kirana: '🛒',
-    handloom: '🧵',
+    retail: '🛒',
+    textiles: '🧵',
+    foodtech: '🌾',
+    farming: '🌱',
+    kirana: '🏪',
+    handloom: '🎨',
     poultry: '🍗',
     workshop: '🛠️',
   };
@@ -48,36 +53,36 @@ export const EnterpriseProfileModal: React.FC<EnterpriseProfileModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-950/70 backdrop-blur-sm animate-fadeIn">
-      <div className="bg-stone-900 border border-stone-800 text-stone-100 rounded-2xl w-full max-w-xl shadow-2xl overflow-hidden max-h-[90vh] flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fadeIn">
+      <div className="bg-white border border-slate-200 text-slate-800 rounded-3xl w-full max-w-xl shadow-2xl overflow-hidden max-h-[92vh] flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-stone-800 bg-stone-920">
-          <div className="flex items-center space-x-2.5">
-            <div className="w-9 h-9 rounded-lg bg-amber-600/20 text-amber-400 border border-amber-500/30 flex items-center justify-center">
-              <Store className="w-5 h-5" />
+        <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/80">
+          <div className="flex items-center space-x-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold">
+              <Store className="w-5 h-5 text-emerald-700" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-stone-100">
-                Rural Enterprise Profile & Location
+              <h2 className="text-base font-bold text-slate-900">
+                Rural Enterprise & Location Profile
               </h2>
-              <p className="text-xs text-stone-400">
-                Hyper-local context for tailored business & financial advisory
+              <p className="text-xs text-slate-500">
+                Hyper-local context for MoSJE concessional credit & feasibility analysis
               </p>
             </div>
           </div>
           <button
             id="close-profile-modal-btn"
             onClick={onClose}
-            className="p-1.5 rounded-lg text-stone-400 hover:text-stone-100 hover:bg-stone-800 transition-colors"
+            className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Existing Profiles Selector */}
-        <div className="px-6 py-3 bg-stone-850/60 border-b border-stone-800 flex items-center justify-between">
-          <div className="text-xs text-stone-400">Switch profile:</div>
-          <div className="flex items-center space-x-2 overflow-x-auto py-1">
+        <div className="px-6 py-2.5 bg-slate-100/60 border-b border-slate-100 flex items-center justify-between gap-2 overflow-x-auto">
+          <span className="text-xs font-semibold text-slate-500 shrink-0">Switch Profile:</span>
+          <div className="flex items-center space-x-2 py-0.5">
             {allEnterprises.map(ent => (
               <button
                 key={ent.id}
@@ -86,13 +91,13 @@ export const EnterpriseProfileModal: React.FC<EnterpriseProfileModalProps> = ({
                   onSelectEnterprise(ent);
                   setFormData({ ...ent });
                 }}
-                className={`px-2.5 py-1 rounded-md text-xs font-medium border flex items-center space-x-1.5 whitespace-nowrap transition-colors ${
+                className={`px-3 py-1 rounded-lg text-xs font-semibold border flex items-center space-x-1.5 whitespace-nowrap transition-all ${
                   ent.id === enterprise.id
-                    ? 'bg-amber-600 text-stone-950 border-amber-500 font-bold'
-                    : 'bg-stone-800 text-stone-300 border-stone-700 hover:bg-stone-750'
+                    ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                    : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'
                 }`}
               >
-                <span>{tradeIcons[ent.tradeType]}</span>
+                <span>{tradeIcons[ent.tradeType] || '🌾'}</span>
                 <span>{ent.name}</span>
               </button>
             ))}
@@ -104,48 +109,44 @@ export const EnterpriseProfileModal: React.FC<EnterpriseProfileModalProps> = ({
           {/* Business Name & Owner */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs font-semibold text-stone-300 mb-1">
-                Enterprise / Shop Name
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Enterprise / Unit Name
               </label>
-              <div className="relative">
-                <input
-                  type="text"
-                  required
-                  id="ent-name-input"
-                  value={formData.name}
-                  onChange={e => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg bg-stone-800 border border-stone-700 text-sm text-stone-100 focus:outline-none focus:border-amber-500"
-                  placeholder="e.g. Kisan Dairy Farm"
-                />
-              </div>
+              <input
+                type="text"
+                required
+                id="ent-name-input"
+                value={formData.name}
+                onChange={e => setFormData({ ...formData, name: e.target.value })}
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                placeholder="e.g. Kisan Dairy Farm"
+              />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-stone-300 mb-1">
+              <label className="block text-xs font-bold text-slate-700 mb-1">
                 Owner / Entrepreneur Name
               </label>
-              <div className="relative">
-                <input
-                  type="text"
-                  required
-                  id="ent-owner-input"
-                  value={formData.ownerName}
-                  onChange={e => setFormData({ ...formData, ownerName: e.target.value })}
-                  className="w-full px-3 py-2 rounded-lg bg-stone-800 border border-stone-700 text-sm text-stone-100 focus:outline-none focus:border-amber-500"
-                  placeholder="e.g. Rameshwar Yadav"
-                />
-              </div>
+              <input
+                type="text"
+                required
+                id="ent-owner-input"
+                value={formData.ownerName}
+                onChange={e => setFormData({ ...formData, ownerName: e.target.value })}
+                className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                placeholder="e.g. Rameshwar Yadav"
+              />
             </div>
           </div>
 
           {/* Trade Type Selection */}
           <div>
-            <label className="block text-xs font-semibold text-stone-300 mb-1.5">
-              Select Rural Micro Trade / Sector
+            <label className="block text-xs font-bold text-slate-700 mb-2">
+              Select Sector / Trade
             </label>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               {trades.map(trade => {
-                const label = TRADE_LABELS[language]?.[trade] || TRADE_LABELS.en[trade];
+                const label = TRADE_LABELS[language]?.[trade] || TRADE_LABELS.en[trade] || trade.toUpperCase();
                 const isSelected = formData.tradeType === trade;
                 return (
                   <button
@@ -155,12 +156,12 @@ export const EnterpriseProfileModal: React.FC<EnterpriseProfileModalProps> = ({
                     onClick={() => setFormData({ ...formData, tradeType: trade })}
                     className={`p-2.5 rounded-xl border text-left transition-all flex flex-col justify-between ${
                       isSelected
-                        ? 'bg-amber-600/20 border-amber-500 text-amber-300 ring-1 ring-amber-500'
-                        : 'bg-stone-800/80 border-stone-700 text-stone-300 hover:bg-stone-750'
+                        ? 'bg-emerald-50 border-emerald-600 ring-2 ring-emerald-500/20 text-emerald-900 shadow-xs'
+                        : 'bg-slate-50/70 border-slate-200 text-slate-700 hover:bg-slate-100'
                     }`}
                   >
-                    <span className="text-xl mb-1">{tradeIcons[trade]}</span>
-                    <span className="text-xs font-semibold line-clamp-2 leading-tight">
+                    <span className="text-xl mb-1">{tradeIcons[trade] || '🌾'}</span>
+                    <span className="text-xs font-bold line-clamp-1 leading-tight capitalize">
                       {label}
                     </span>
                   </button>
@@ -172,8 +173,8 @@ export const EnterpriseProfileModal: React.FC<EnterpriseProfileModalProps> = ({
           {/* Location: Village, District, State */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
-              <label className="block text-xs font-semibold text-stone-300 mb-1">
-                Village (ग्राम)
+              <label className="block text-xs font-bold text-slate-700 mb-1">
+                Village / Gram Panchayat
               </label>
               <input
                 type="text"
@@ -181,13 +182,13 @@ export const EnterpriseProfileModal: React.FC<EnterpriseProfileModalProps> = ({
                 id="ent-village-input"
                 value={formData.village}
                 onChange={e => setFormData({ ...formData, village: e.target.value })}
-                className="w-full px-3 py-2 rounded-lg bg-stone-800 border border-stone-700 text-sm text-stone-100 focus:outline-none focus:border-amber-500"
+                className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
                 placeholder="Village name"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-stone-300 mb-1">
+              <label className="block text-xs font-bold text-slate-700 mb-1">
                 District (ज़िला)
               </label>
               <input
@@ -196,13 +197,13 @@ export const EnterpriseProfileModal: React.FC<EnterpriseProfileModalProps> = ({
                 id="ent-district-input"
                 value={formData.district}
                 onChange={e => setFormData({ ...formData, district: e.target.value })}
-                className="w-full px-3 py-2 rounded-lg bg-stone-800 border border-stone-700 text-sm text-stone-100 focus:outline-none focus:border-amber-500"
+                className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
                 placeholder="District name"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-stone-300 mb-1">
+              <label className="block text-xs font-bold text-slate-700 mb-1">
                 State (राज्य)
               </label>
               <input
@@ -211,7 +212,7 @@ export const EnterpriseProfileModal: React.FC<EnterpriseProfileModalProps> = ({
                 id="ent-state-input"
                 value={formData.state}
                 onChange={e => setFormData({ ...formData, state: e.target.value })}
-                className="w-full px-3 py-2 rounded-lg bg-stone-800 border border-stone-700 text-sm text-stone-100 focus:outline-none focus:border-amber-500"
+                className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
                 placeholder="State name"
               />
             </div>
@@ -220,11 +221,11 @@ export const EnterpriseProfileModal: React.FC<EnterpriseProfileModalProps> = ({
           {/* Monthly Financial Estimates */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
             <div>
-              <label className="block text-xs font-semibold text-stone-300 mb-1">
+              <label className="block text-xs font-bold text-slate-700 mb-1">
                 Estimated Monthly Sales / Inflow (₹)
               </label>
               <div className="relative">
-                <span className="absolute left-3 top-2.5 text-stone-400 text-sm">₹</span>
+                <span className="absolute left-3.5 top-2.5 text-slate-400 text-sm font-semibold">₹</span>
                 <input
                   type="number"
                   required
@@ -236,18 +237,18 @@ export const EnterpriseProfileModal: React.FC<EnterpriseProfileModalProps> = ({
                       monthlyRevenueEstimate: Number(e.target.value),
                     })
                   }
-                  className="w-full pl-8 pr-3 py-2 rounded-lg bg-stone-800 border border-stone-700 text-sm text-stone-100 focus:outline-none focus:border-amber-500"
+                  className="w-full pl-8 pr-3 py-2 rounded-xl border border-slate-300 text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
                   placeholder="40000"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-stone-300 mb-1">
+              <label className="block text-xs font-bold text-slate-700 mb-1">
                 Estimated Monthly Costs / Outflow (₹)
               </label>
               <div className="relative">
-                <span className="absolute left-3 top-2.5 text-stone-400 text-sm">₹</span>
+                <span className="absolute left-3.5 top-2.5 text-slate-400 text-sm font-semibold">₹</span>
                 <input
                   type="number"
                   required
@@ -259,7 +260,7 @@ export const EnterpriseProfileModal: React.FC<EnterpriseProfileModalProps> = ({
                       monthlyExpenseEstimate: Number(e.target.value),
                     })
                   }
-                  className="w-full pl-8 pr-3 py-2 rounded-lg bg-stone-800 border border-stone-700 text-sm text-stone-100 focus:outline-none focus:border-amber-500"
+                  className="w-full pl-8 pr-3 py-2 rounded-xl border border-slate-300 text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
                   placeholder="24000"
                 />
               </div>
@@ -267,11 +268,11 @@ export const EnterpriseProfileModal: React.FC<EnterpriseProfileModalProps> = ({
           </div>
 
           {/* Net Margin indicator */}
-          <div className="p-3 rounded-xl bg-amber-950/30 border border-amber-600/30 flex items-center justify-between text-xs">
-            <span className="text-amber-200">
-              Estimated Monthly Operating Surplus:
+          <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-between text-xs">
+            <span className="text-emerald-800 font-semibold">
+              Estimated Monthly Operational Surplus:
             </span>
-            <span className="font-bold text-sm text-amber-400">
+            <span className="font-bold text-sm text-emerald-900 font-mono">
               ₹
               {Math.max(
                 0,
@@ -280,19 +281,19 @@ export const EnterpriseProfileModal: React.FC<EnterpriseProfileModalProps> = ({
             </span>
           </div>
 
-          {/* Save Button */}
+          {/* Action buttons */}
           <div className="flex justify-end space-x-3 pt-2">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-lg border border-stone-700 text-xs font-medium text-stone-300 hover:bg-stone-800 transition-colors"
+              className="px-4 py-2 rounded-xl border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-colors"
             >
               Cancel
             </button>
             <button
               type="submit"
               id="save-enterprise-profile-btn"
-              className="px-5 py-2 rounded-lg bg-amber-600 hover:bg-amber-500 text-stone-950 text-xs font-bold transition-colors shadow-md flex items-center space-x-1.5"
+              className="px-5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition-all shadow-sm flex items-center space-x-1.5"
             >
               <Check className="w-4 h-4" />
               <span>Update Profile</span>

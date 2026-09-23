@@ -13,6 +13,8 @@ import {
   ArrowRight,
   Calculator,
   Building,
+  AlertTriangle,
+  X,
 } from 'lucide-react';
 import { Enterprise, LoanRecord, LoanDossier, LanguageCode } from '../types';
 import { UI_TEXT } from '../services/i18n';
@@ -55,7 +57,10 @@ export const DebtRestructuring: React.FC<DebtRestructuringProps> = ({
   // Dossier requirement form
   const [dossierReq, setDossierReq] = useState({
     amountNeeded: 50000,
-    purpose: enterprise.tradeType === 'dairy' ? 'Purchase of 1 milch buffalo and cattle shed tin roof' : 'Working capital expansion and wholesale stock',
+    purpose:
+      enterprise.tradeType === 'dairy'
+        ? 'Purchase of 1 milch buffalo and cattle shed tin roof'
+        : 'Working capital expansion and wholesale stock',
     targetTenureMonths: 24,
   });
 
@@ -68,16 +73,20 @@ export const DebtRestructuring: React.FC<DebtRestructuringProps> = ({
   const informalDebt = informalLoans.reduce((s, l) => s + l.remainingAmount, 0);
 
   // Annual interest paid on informal debt
-  const annualInformalInterest = informalLoans.reduce(
-    (s, l) => s + (l.remainingAmount * l.interestRateAnnual) / 100,
+  const annualInformalInterestPaid = informalLoans.reduce(
+    (s, l) => s + l.remainingAmount * (l.interestRateAnnual / 100),
     0
   );
 
-  // If refinanced at 9% bank / SHG rate
-  const annualBankInterestEquivalent = informalDebt * 0.09;
-  const annualInterestSaved = Math.max(0, Math.round(annualInformalInterest - annualBankInterestEquivalent));
+  // What that same debt would cost at MoSJE 6.5% - 8.0%
+  const annualFormalInterest = informalDebt * 0.07;
+  const annualInterestSaved = Math.round(annualInformalInterestPaid - annualFormalInterest);
 
-  // Generate Bank Project Dossier
+  const netMonthlySurplus = Math.max(
+    0,
+    enterprise.monthlyRevenueEstimate - enterprise.monthlyExpenseEstimate
+  );
+
   const handleGenerateDossier = async () => {
     setDossierLoading(true);
     try {
@@ -86,34 +95,29 @@ export const DebtRestructuring: React.FC<DebtRestructuringProps> = ({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            enterpriseId: enterprise.id,
             loanRequirement: dossierReq,
+            enterpriseId: enterprise.id,
             language,
           }),
         });
+
         if (res.ok) {
-          const data = await res.json();
-          setGeneratedDossier(data);
+          const dossier = await res.json();
+          setGeneratedDossier(dossier);
           setDossierLoading(false);
           return;
         }
       }
 
-      // Offline fallback calculation
-      const netMonthlySurplus = Math.max(0, enterprise.monthlyRevenueEstimate - enterprise.monthlyExpenseEstimate);
-      const r = 0.09 / 12;
-      const n = dossierReq.targetTenureMonths;
+      // Offline deterministic fallback dossier
       const p = dossierReq.amountNeeded;
-      const estimatedEmi = Math.round((p * r * Math.pow(1 + r, n)) / (Math.pow(1 + r, n) - 1));
-      const totalEmi = totalMonthlyEmi + estimatedEmi;
-      const dscr = totalEmi > 0 ? Number((netMonthlySurplus / totalEmi).toFixed(2)) : 2.2;
-
-      let scheme = 'PMMY MUDRA Shishu Loan';
-      let code = 'PMMY-SHISHU';
-      if (enterprise.tradeType === 'dairy') {
-        scheme = 'KCC Animal Husbandry Working Capital Facility';
-        code = 'KCC-DAIRY';
-      }
+      const proposedEmi = Math.round((p * 0.08 * 2 + p) / dossierReq.targetTenureMonths);
+      const dscr = Number((netMonthlySurplus / (proposedEmi || 1)).toFixed(2));
+      const scheme =
+        p <= 140000
+          ? 'MoSJE Micro Finance Scheme (6.5% Concessional Credit)'
+          : 'MoSJE Term Loan Scheme (8.0% Concessional Credit)';
+      const code = p <= 140000 ? 'MoSJE-MFS-6.5' : 'MoSJE-TLS-8.0';
 
       setGeneratedDossier({
         dscr,
@@ -125,10 +129,10 @@ export const DebtRestructuring: React.FC<DebtRestructuringProps> = ({
 Location: ${enterprise.village}, ${enterprise.district}
 Owner: ${enterprise.ownerName} | Trade: ${enterprise.tradeType.toUpperCase()}
 
-1. Business Overview: Steady village micro-unit with monthly sales of ₹${enterprise.monthlyRevenueEstimate} and operating costs of ₹${enterprise.monthlyExpenseEstimate}, yielding net operational surplus of ₹${netMonthlySurplus}.
-2. Credit Request: Term credit facility of ₹${dossierReq.amountNeeded} over ${dossierReq.targetTenureMonths} months for "${dossierReq.purpose}".
+1. Business Overview: Steady village micro-unit with monthly sales of ₹${enterprise.monthlyRevenueEstimate.toLocaleString('en-IN')} and operating costs of ₹${enterprise.monthlyExpenseEstimate.toLocaleString('en-IN')}, yielding net operational surplus of ₹${netMonthlySurplus.toLocaleString('en-IN')}.
+2. Credit Request: Term credit facility of ₹${dossierReq.amountNeeded.toLocaleString('en-IN')} over ${dossierReq.targetTenureMonths} months for "${dossierReq.purpose}".
 3. Debt Service Coverage Ratio (DSCR): ${dscr} (Comfortably above bank benchmark of 1.25).
-4. Refinancing & Productivity: Transitioning from informal borrowing to formal bank credit liberates ₹${annualInterestSaved} annually in retained cash flow, directly safeguarding loan servicing.`,
+4. Refinancing & Productivity: Transitioning from informal borrowing to formal bank credit liberates ₹${annualInterestSaved.toLocaleString('en-IN')} annually in retained cash flow, directly safeguarding loan servicing.`,
         dossierChecklist: [
           'Aadhaar Card and Village Voter ID of the entrepreneur',
           'Panchayat / Sarpanch Trade Endorsement Letter',
@@ -138,7 +142,7 @@ Owner: ${enterprise.ownerName} | Trade: ${enterprise.tradeType.toUpperCase()}
         ],
       });
     } catch {
-      // Error handling
+      // Error handling fallback
     } finally {
       setDossierLoading(false);
     }
@@ -187,16 +191,16 @@ Owner: ${enterprise.ownerName} | Trade: ${enterprise.tradeType.toUpperCase()}
   return (
     <div className="space-y-6">
       {/* Overview & High Interest Warning Banner */}
-      <div className="p-5 sm:p-6 rounded-2xl bg-stone-900 border border-stone-800 text-stone-100 shadow-md">
+      <div className="p-5 sm:p-6 rounded-2xl bg-white border border-slate-200 text-slate-800 shadow-sm">
         <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
           <div>
             <div className="flex items-center space-x-2">
-              <Building className="w-5 h-5 text-amber-400" />
-              <h2 className="text-base sm:text-lg font-bold text-stone-100">
+              <Building className="w-5 h-5 text-emerald-700" />
+              <h2 className="text-base sm:text-lg font-bold text-slate-900">
                 {t.debtRestructuringTitle}
               </h2>
             </div>
-            <p className="text-xs sm:text-sm text-stone-400 mt-1 max-w-2xl">
+            <p className="text-xs sm:text-sm text-slate-600 mt-1 max-w-2xl">
               {t.debtRestructuringSubtitle}
             </p>
           </div>
@@ -204,7 +208,7 @@ Owner: ${enterprise.ownerName} | Trade: ${enterprise.tradeType.toUpperCase()}
           <button
             id="add-loan-btn"
             onClick={() => setAddLoanOpen(true)}
-            className="px-4 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-stone-950 text-xs font-bold transition-colors shadow-md flex items-center space-x-1.5 shrink-0"
+            className="px-4 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition-colors shadow-xs flex items-center space-x-1.5 shrink-0"
           >
             <Plus className="w-4 h-4" />
             <span>Record Debt / Loan</span>
@@ -213,147 +217,185 @@ Owner: ${enterprise.ownerName} | Trade: ${enterprise.tradeType.toUpperCase()}
 
         {/* Informational comparison cards */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-6">
-          <div className="p-4 rounded-xl bg-stone-950/80 border border-stone-800">
-            <span className="text-[11px] uppercase tracking-wider text-stone-400 font-semibold block">
+          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200">
+            <span className="text-[11px] uppercase tracking-wider text-slate-500 font-semibold block">
               Total Active Debt Burden
             </span>
-            <div className="text-2xl font-bold font-mono text-stone-100 mt-1">
+            <div className="text-2xl font-bold font-mono text-slate-900 mt-1">
               ₹{totalDebt.toLocaleString('en-IN')}
             </div>
-            <span className="text-xs text-stone-500">
-              Across {loans.length} active credit source(s)
+            <span className="text-xs text-slate-500 mt-1 block">
+              Monthly EMI: ₹{totalMonthlyEmi.toLocaleString('en-IN')}
             </span>
           </div>
 
-          <div className="p-4 rounded-xl bg-rose-950/40 border border-rose-800/60">
-            <span className="text-[11px] uppercase tracking-wider text-rose-300 font-semibold block">
-              Informal Moneylender Debt
+          <div className="p-4 rounded-xl bg-rose-50 border border-rose-200">
+            <span className="text-[11px] uppercase tracking-wider text-rose-800 font-bold block flex items-center space-x-1">
+              <ShieldAlert className="w-3.5 h-3.5 text-rose-600" />
+              <span>High-Cost Informal Debt</span>
             </span>
-            <div className="text-2xl font-bold font-mono text-rose-400 mt-1">
+            <div className="text-2xl font-bold font-mono text-rose-700 mt-1">
               ₹{informalDebt.toLocaleString('en-IN')}
             </div>
-            <span className="text-xs text-rose-300/80">
-              Interest rate ≥ 24% to 60% per year
+            <span className="text-xs text-rose-700 mt-1 block">
+              Interest rates: 24% to 48% p.a.
             </span>
           </div>
 
-          <div className="p-4 rounded-xl bg-emerald-950/40 border border-emerald-800/60">
-            <span className="text-[11px] uppercase tracking-wider text-emerald-300 font-semibold block">
-              Annual Savings by Bank Refinance
+          <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200">
+            <span className="text-[11px] uppercase tracking-wider text-emerald-800 font-bold block flex items-center space-x-1">
+              <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Annual Interest Saved via MoSJE</span>
             </span>
-            <div className="text-2xl font-bold font-mono text-emerald-400 mt-1">
+            <div className="text-2xl font-bold font-mono text-emerald-700 mt-1">
               ₹{annualInterestSaved.toLocaleString('en-IN')}
             </div>
-            <span className="text-xs text-emerald-300/80">
-              Cash that stays in your household every year
+            <span className="text-xs text-emerald-800 mt-1 block">
+              Retained in entrepreneur's pocket
             </span>
           </div>
         </div>
       </div>
 
-      {/* Active Loans List */}
-      <div className="rounded-2xl bg-stone-900 border border-stone-800 text-stone-100 shadow-md overflow-hidden">
-        <div className="p-4 sm:p-5 border-b border-stone-800 flex items-center justify-between">
-          <h3 className="text-sm font-bold text-stone-200">
-            Current Borrowings & Moneylender Ledger ({loans.length})
+      {/* Existing Loans Table */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="p-4 sm:p-5 border-b border-slate-200 flex items-center justify-between bg-slate-50/70">
+          <h3 className="font-bold text-sm sm:text-base text-slate-900">
+            Current Borrowings & Moneylender Obligations
           </h3>
-          <span className="text-xs text-stone-400">
-            Total Monthly EMI Outgo: ₹{totalMonthlyEmi.toLocaleString('en-IN')}
+          <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-200 text-slate-700">
+            {loans.length} recorded
           </span>
         </div>
 
         {loans.length === 0 ? (
-          <div className="p-8 text-center text-stone-400 text-xs sm:text-sm">
-            No loans or debt recorded yet. You can log existing moneylender or SHG loans to structure refinancing.
+          <div className="p-8 text-center text-slate-500 text-xs sm:text-sm">
+            No loans recorded yet. Click "Record Debt / Loan" above to add moneylender or bank debt.
           </div>
         ) : (
-          <div className="divide-y divide-stone-800">
-            {loans.map(loan => {
-              const isHighRisk = loan.interestRateAnnual >= 24;
-
-              return (
-                <div
-                  key={loan.id}
-                  className="p-4 hover:bg-stone-850/50 transition-colors flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs sm:text-sm"
-                >
-                  <div className="flex items-start space-x-3">
-                    <div
-                      className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
-                        isHighRisk
-                          ? 'bg-rose-950 text-rose-400 border border-rose-800'
-                          : 'bg-emerald-950 text-emerald-400 border border-emerald-800'
-                      }`}
-                    >
-                      {isHighRisk ? (
-                        <ShieldAlert className="w-5 h-5" />
-                      ) : (
-                        <ShieldCheck className="w-5 h-5" />
-                      )}
-                    </div>
-                    <div>
-                      <div className="flex items-center space-x-2">
-                        <span className="font-bold text-stone-100">
-                          {loan.lenderName}
-                        </span>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs sm:text-sm">
+              <thead className="bg-slate-100 text-slate-600 uppercase text-[10px] tracking-wider border-b border-slate-200">
+                <tr>
+                  <th className="py-3 px-4">Lender</th>
+                  <th className="py-3 px-4">Type</th>
+                  <th className="py-3 px-4 text-right">Principal (₹)</th>
+                  <th className="py-3 px-4 text-right">Remaining (₹)</th>
+                  <th className="py-3 px-4 text-center">Interest Rate</th>
+                  <th className="py-3 px-4 text-right">Monthly EMI (₹)</th>
+                  <th className="py-3 px-4 text-center">Risk</th>
+                  <th className="py-3 px-4 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {loans.map(loan => {
+                  const isHighRisk = loan.interestRateAnnual >= 30;
+                  return (
+                    <tr key={loan.id} className="hover:bg-slate-50/80 transition-colors">
+                      <td className="py-3 px-4 font-bold text-slate-800">
+                        {loan.lenderName}
+                        {loan.purpose && (
+                          <span className="block text-[11px] font-normal text-slate-500">
+                            {loan.purpose}
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4 capitalize text-slate-600">
+                        {loan.lenderType.replace('_', ' ')}
+                      </td>
+                      <td className="py-3 px-4 text-right font-mono text-slate-700">
+                        ₹{loan.principalAmount.toLocaleString('en-IN')}
+                      </td>
+                      <td className="py-3 px-4 text-right font-mono font-bold text-slate-900">
+                        ₹{loan.remainingAmount.toLocaleString('en-IN')}
+                      </td>
+                      <td className="py-3 px-4 text-center font-mono">
                         <span
-                          className={`text-[10px] px-2 py-0.5 rounded-full uppercase font-bold border ${
+                          className={`px-2 py-0.5 rounded-full text-xs font-bold ${
                             isHighRisk
-                              ? 'bg-rose-950/90 text-rose-300 border-rose-700'
-                              : 'bg-emerald-950/90 text-emerald-300 border-emerald-700'
+                              ? 'bg-rose-100 text-rose-800 border border-rose-200'
+                              : 'bg-slate-100 text-slate-700'
                           }`}
                         >
-                          {loan.interestRateAnnual}% Annual Interest
+                          {loan.interestRateAnnual}% p.a.
                         </span>
-                      </div>
-                      <div className="text-xs text-stone-400 mt-0.5">
-                        {loan.purpose || 'Working capital borrow'} • Tenure: {loan.tenureMonths} mos • Monthly EMI: ₹{loan.monthlyEmi}
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center space-x-4 self-end sm:self-center">
-                    <div className="text-right">
-                      <div className="text-stone-400 text-[11px]">
-                        Remaining Balance
-                      </div>
-                      <div className="text-sm sm:text-base font-bold font-mono text-stone-100">
-                        ₹{loan.remainingAmount.toLocaleString('en-IN')}
-                      </div>
-                    </div>
-
-                    <button
-                      id={`delete-loan-btn-${loan.id}`}
-                      onClick={() => onDeleteLoan(loan.id)}
-                      className="p-1.5 rounded-lg text-stone-500 hover:text-rose-400 hover:bg-stone-800 transition-colors"
-                      title="Delete loan record"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
+                      </td>
+                      <td className="py-3 px-4 text-right font-mono font-semibold text-slate-700">
+                        ₹{loan.monthlyEmi.toLocaleString('en-IN')}
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                            loan.riskRating === 'critical'
+                              ? 'bg-rose-100 text-rose-800'
+                              : loan.riskRating === 'moderate'
+                              ? 'bg-amber-100 text-amber-800'
+                              : 'bg-emerald-100 text-emerald-800'
+                          }`}
+                        >
+                          {loan.riskRating}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-right">
+                        <button
+                          id={`delete-loan-btn-${loan.id}`}
+                          onClick={() => onDeleteLoan(loan.id)}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                          title="Delete loan record"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
 
-      {/* Bank-Ready Project Dossier Generator */}
-      <div className="p-5 sm:p-6 rounded-2xl bg-stone-900 border border-stone-800 text-stone-100 shadow-md">
-        <div className="flex items-center space-x-2.5 mb-2">
-          <FileText className="w-5 h-5 text-amber-400" />
-          <h3 className="text-base font-bold text-stone-100">
-            Generate Bank-Ready Credit & Appraisal Dossier
-          </h3>
-        </div>
-        <p className="text-xs text-stone-400 mb-4 max-w-2xl">
-          Rural bank managers (Gramin Banks / RRBs / SBI) require structured cash flows and Debt Service Coverage Ratio (DSCR) before sanctioning collateral-free MUDRA or KCC loans.
-        </p>
-
-        {/* Input Parameters */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-4">
+      {/* Bank Dossier & Restructuring Generator */}
+      <div className="bg-white rounded-2xl p-5 sm:p-6 border border-slate-200 shadow-sm space-y-6">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
           <div>
-            <label className="block text-xs font-semibold text-stone-300 mb-1">
-              Loan Amount Needed (₹)
+            <span className="text-xs font-bold uppercase tracking-wider text-emerald-700 flex items-center space-x-1">
+              <Sparkles className="w-4 h-4" />
+              <span>Credit Structuring & Bank Appraisal</span>
+            </span>
+            <h3 className="text-base sm:text-lg font-bold text-slate-900 mt-0.5">
+              {t.dossierTitle}
+            </h3>
+            <p className="text-xs text-slate-500">
+              Formulate an institutional proposal with Debt Service Coverage Ratio (DSCR) for bank or SCA presentation
+            </p>
+          </div>
+
+          <button
+            id="generate-dossier-btn"
+            onClick={handleGenerateDossier}
+            disabled={dossierLoading}
+            className="px-5 py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs sm:text-sm font-bold shadow-xs transition-all flex items-center space-x-2 disabled:opacity-50"
+          >
+            {dossierLoading ? (
+              <>
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                <span>Structuring Proposal...</span>
+              </>
+            ) : (
+              <>
+                <FileText className="w-4 h-4" />
+                <span>Generate Official Dossier</span>
+              </>
+            )}
+          </button>
+        </div>
+
+        {/* Input Parameters for Dossier */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div>
+            <label className="block text-xs font-bold text-slate-700 mb-1">
+              Target Loan Amount (₹)
             </label>
             <input
               type="number"
@@ -362,13 +404,12 @@ Owner: ${enterprise.ownerName} | Trade: ${enterprise.tradeType.toUpperCase()}
               onChange={e =>
                 setDossierReq({ ...dossierReq, amountNeeded: Number(e.target.value) })
               }
-              className="w-full px-3 py-2 rounded-xl bg-stone-800 border border-stone-700 text-sm font-mono font-bold text-stone-100 focus:outline-none focus:border-amber-500"
-              placeholder="50000"
+              className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-stone-300 mb-1">
+            <label className="block text-xs font-bold text-slate-700 mb-1">
               Repayment Tenure (Months)
             </label>
             <select
@@ -377,96 +418,77 @@ Owner: ${enterprise.ownerName} | Trade: ${enterprise.tradeType.toUpperCase()}
               onChange={e =>
                 setDossierReq({ ...dossierReq, targetTenureMonths: Number(e.target.value) })
               }
-              className="w-full px-3 py-2 rounded-xl bg-stone-800 border border-stone-700 text-sm text-stone-100 focus:outline-none focus:border-amber-500"
+              className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
             >
-              <option value="12">12 Months (1 Year)</option>
-              <option value="24">24 Months (2 Years)</option>
-              <option value="36">36 Months (3 Years)</option>
-              <option value="60">60 Months (5 Years)</option>
+              <option value={12}>12 Months (1 Year)</option>
+              <option value={24}>24 Months (2 Years)</option>
+              <option value={36}>36 Months (3 Years - Micro Finance)</option>
+              <option value={60}>60 Months (5 Years)</option>
+              <option value={84}>84 Months (7 Years - Term Loan)</option>
             </select>
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-stone-300 mb-1">
-              Productive Purpose
+            <label className="block text-xs font-bold text-slate-700 mb-1">
+              Asset / Expansion Purpose
             </label>
             <input
               type="text"
               id="dossier-purpose-input"
               value={dossierReq.purpose}
-              onChange={e =>
-                setDossierReq({ ...dossierReq, purpose: e.target.value })
-              }
-              className="w-full px-3 py-2 rounded-xl bg-stone-800 border border-stone-700 text-xs text-stone-100 focus:outline-none focus:border-amber-500"
-              placeholder="e.g. Buffalo purchase, shop inventory"
+              onChange={e => setDossierReq({ ...dossierReq, purpose: e.target.value })}
+              className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
             />
           </div>
         </div>
 
-        <button
-          id="generate-dossier-action-btn"
-          onClick={handleGenerateDossier}
-          disabled={dossierLoading}
-          className="w-full sm:w-auto px-6 py-3 rounded-xl bg-amber-600 hover:bg-amber-500 text-stone-950 text-xs font-bold transition-all shadow-md flex items-center justify-center space-x-2 disabled:opacity-50"
-        >
-          <Sparkles className="w-4 h-4" />
-          <span>{dossierLoading ? 'Structuring Bank Dossier...' : t.generateBankDossier}</span>
-        </button>
-
-        {/* Generated Dossier View */}
+        {/* Generated Dossier Preview */}
         {generatedDossier && (
-          <div className="mt-6 p-5 sm:p-6 rounded-xl bg-stone-950 border border-stone-800 text-stone-100 space-y-4 animate-fadeIn">
-            {/* Header / Scores */}
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between pb-4 border-b border-stone-800 gap-3">
+          <div className="p-6 rounded-2xl bg-slate-50 border border-slate-200 space-y-4 animate-fadeIn">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
               <div>
-                <span className="text-[10px] uppercase font-bold tracking-wider px-2 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-800">
-                  {generatedDossier.schemeCode}
+                <span className="text-xs font-bold text-emerald-800 uppercase tracking-wider">
+                  Recommended Concessional Scheme
                 </span>
-                <h4 className="text-base font-bold text-amber-400 mt-1">
+                <h4 className="text-base font-bold text-slate-900 mt-0.5">
                   {generatedDossier.recommendedScheme}
                 </h4>
               </div>
 
-              <div className="flex items-center space-x-4">
+              <div className="flex items-center space-x-2">
                 <div className="text-right">
-                  <div className="text-[10px] text-stone-400 uppercase">
-                    Bank DSCR Metric
-                  </div>
-                  <div className="text-lg font-bold font-mono text-emerald-400">
-                    {generatedDossier.dscr}x{' '}
-                    <span className="text-xs text-stone-400 font-normal">
-                      (&gt;1.25 standard)
-                    </span>
-                  </div>
+                  <span className="text-[10px] text-slate-500 uppercase font-bold block">DSCR Score</span>
+                  <span className="text-xl font-bold font-mono text-emerald-700">
+                    {generatedDossier.dscr}x
+                  </span>
                 </div>
-
                 <button
                   onClick={() => window.print()}
-                  className="px-3 py-1.5 rounded-lg bg-stone-800 hover:bg-stone-700 text-stone-300 text-xs flex items-center space-x-1.5 border border-stone-700"
+                  className="p-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-100 text-slate-700 shadow-xs"
+                  title="Print Dossier"
                 >
-                  <Printer className="w-3.5 h-3.5" />
-                  <span>Print Dossier</span>
+                  <Printer className="w-4 h-4" />
                 </button>
               </div>
             </div>
 
-            {/* Dossier Text */}
-            <div className="text-xs sm:text-sm font-mono whitespace-pre-wrap text-stone-300 bg-stone-900/80 p-4 rounded-xl border border-stone-850 leading-relaxed">
+            {/* Dossier summary */}
+            <div className="bg-white p-4 rounded-xl border border-slate-200 text-xs font-mono whitespace-pre-wrap text-slate-700 leading-relaxed">
               {generatedDossier.structuredDossierSummary}
             </div>
 
-            {/* Document Checklist */}
-            <div>
-              <h5 className="text-xs font-bold text-stone-300 uppercase tracking-wider mb-2">
-                Mandatory Documentation Checklist for Bank Branch:
-              </h5>
+            {/* Checklist */}
+            <div className="pt-2">
+              <div className="text-xs font-bold text-slate-800 mb-2">
+                Required Documentation Checklist for Bank Manager / SCA Field Officer:
+              </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {generatedDossier.dossierChecklist.map((item, idx) => (
                   <div
                     key={idx}
-                    className="p-2.5 rounded-lg bg-stone-900 border border-stone-800 text-xs text-stone-300 flex items-start space-x-2"
+                    className="flex items-start space-x-2 text-xs text-slate-700 bg-white p-2.5 rounded-xl border border-slate-200"
                   >
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
                     <span>{item}</span>
                   </div>
                 ))}
@@ -478,24 +500,25 @@ Owner: ${enterprise.ownerName} | Trade: ${enterprise.tradeType.toUpperCase()}
 
       {/* Add Loan Modal */}
       {addLoanOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-950/70 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-stone-900 border border-stone-800 text-stone-100 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden">
-            <div className="px-5 py-4 border-b border-stone-800 flex items-center justify-between">
-              <h3 className="text-sm font-bold text-stone-100">
-                Record Existing Debt / Moneylender
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white border border-slate-200 text-slate-800 rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/80">
+              <h3 className="font-bold text-base text-slate-900">
+                Record Debt / Moneylender Obligation
               </h3>
               <button
+                id="close-loan-modal-btn"
                 onClick={() => setAddLoanOpen(false)}
-                className="text-stone-400 hover:text-stone-200"
+                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
               >
-                ✕
+                <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleAddLoanSubmit} className="p-5 space-y-4">
+            <form onSubmit={handleAddLoanSubmit} className="p-6 space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-stone-300 mb-1">
-                  Lender Name / Source
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Lender / Moneylender Name *
                 </label>
                 <input
                   type="text"
@@ -503,14 +526,14 @@ Owner: ${enterprise.ownerName} | Trade: ${enterprise.tradeType.toUpperCase()}
                   id="loan-lender-input"
                   value={newLoan.lenderName}
                   onChange={e => setNewLoan({ ...newLoan, lenderName: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl bg-stone-800 border border-stone-700 text-xs text-stone-100 focus:outline-none focus:border-amber-500"
-                  placeholder="e.g. Village Moneylender, SHG, MFI"
+                  placeholder="e.g. Lala Raghuvir (Village Moneylender)"
+                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-stone-300 mb-1">
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
                     Lender Type
                   </label>
                   <select
@@ -522,19 +545,38 @@ Owner: ${enterprise.ownerName} | Trade: ${enterprise.tradeType.toUpperCase()}
                         lenderType: e.target.value as LoanRecord['lenderType'],
                       })
                     }
-                    className="w-full px-3 py-2 rounded-xl bg-stone-800 border border-stone-700 text-xs text-stone-100 focus:outline-none focus:border-amber-500"
+                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
                   >
-                    <option value="moneylender">Village Moneylender (साहूकार)</option>
-                    <option value="shg">Self-Help Group (SHG)</option>
-                    <option value="mfi">Microfinance (MFI)</option>
-                    <option value="commercial_bank">Bank Branch / PACS</option>
-                    <option value="family">Family / Relatives</option>
+                    <option value="moneylender">Village Moneylender / Mahajan</option>
+                    <option value="mfi">Microfinance Institution (MFI)</option>
+                    <option value="shg">Self Help Group (SHG)</option>
+                    <option value="commercial_bank">Commercial / Rural Bank</option>
+                    <option value="family">Relatives / Informal</option>
                   </select>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-stone-300 mb-1">
-                    Remaining Debt (₹)
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Annual Interest Rate (% p.a.) *
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    id="loan-interest-input"
+                    value={newLoan.interestRateAnnual}
+                    onChange={e =>
+                      setNewLoan({ ...newLoan, interestRateAnnual: e.target.value })
+                    }
+                    placeholder="36"
+                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm font-mono font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Principal Amount (₹) *
                   </label>
                   <input
                     type="number"
@@ -548,59 +590,39 @@ Owner: ${enterprise.ownerName} | Trade: ${enterprise.tradeType.toUpperCase()}
                         remainingAmount: e.target.value,
                       })
                     }
-                    className="w-full px-3 py-2 rounded-xl bg-stone-800 border border-stone-700 text-sm font-mono font-bold text-stone-100 focus:outline-none focus:border-amber-500"
-                    placeholder="30000"
+                    placeholder="40000"
+                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm font-mono text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
                   />
                 </div>
-              </div>
 
-              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-stone-300 mb-1">
-                    Annual Interest Rate (%)
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Remaining Balance (₹)
                   </label>
                   <input
                     type="number"
-                    required
-                    id="loan-interest-input"
-                    value={newLoan.interestRateAnnual}
+                    id="loan-remaining-input"
+                    value={newLoan.remainingAmount}
                     onChange={e =>
-                      setNewLoan({ ...newLoan, interestRateAnnual: e.target.value })
+                      setNewLoan({ ...newLoan, remainingAmount: e.target.value })
                     }
-                    className="w-full px-3 py-2 rounded-xl bg-stone-800 border border-stone-700 text-xs text-stone-100 focus:outline-none focus:border-amber-500"
-                    placeholder="36"
-                  />
-                  <span className="text-[10px] text-stone-400">
-                    (e.g. 3% per month = 36%)
-                  </span>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-stone-300 mb-1">
-                    Monthly EMI (₹)
-                  </label>
-                  <input
-                    type="number"
-                    id="loan-emi-input"
-                    value={newLoan.monthlyEmi}
-                    onChange={e => setNewLoan({ ...newLoan, monthlyEmi: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl bg-stone-800 border border-stone-700 text-xs text-stone-100 focus:outline-none focus:border-amber-500"
-                    placeholder="Optional (auto-calc)"
+                    placeholder="40000"
+                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm font-mono text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-stone-300 mb-1">
-                  Purpose of Loan
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Loan Purpose / Background
                 </label>
                 <input
                   type="text"
                   id="loan-purpose-input"
                   value={newLoan.purpose}
                   onChange={e => setNewLoan({ ...newLoan, purpose: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl bg-stone-800 border border-stone-700 text-xs text-stone-100 focus:outline-none focus:border-amber-500"
-                  placeholder="e.g. Emergency medical, purchase buffalo, seeds"
+                  placeholder="e.g. Urgent cattle medical treatment and feed"
+                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
                 />
               </div>
 
@@ -608,14 +630,14 @@ Owner: ${enterprise.ownerName} | Trade: ${enterprise.tradeType.toUpperCase()}
                 <button
                   type="button"
                   onClick={() => setAddLoanOpen(false)}
-                  className="px-4 py-2 rounded-xl border border-stone-700 text-xs text-stone-300 hover:bg-stone-800"
+                  className="px-4 py-2 rounded-xl border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  id="save-new-loan-submit-btn"
-                  className="px-5 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-stone-950 font-bold text-xs shadow-md transition-colors"
+                  id="save-loan-record-btn"
+                  className="px-5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition-all shadow-xs"
                 >
                   Save Loan Record
                 </button>

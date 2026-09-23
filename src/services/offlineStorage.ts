@@ -13,10 +13,11 @@ const STORAGE_KEYS = {
 };
 
 export interface SyncQueueItem {
-  type: 'ledger_entry' | 'loan' | 'enterprise';
+  type: 'ledger_entry' | 'ledger' | 'loan' | 'enterprise';
   action: 'create' | 'update' | 'delete';
-  data: any;
-  timestamp: string;
+  data?: any;
+  payload?: any;
+  timestamp?: string;
 }
 
 export class OfflineStorageService {
@@ -91,9 +92,21 @@ export class OfflineStorageService {
     this.notifyListeners();
   }
 
-  private queueSyncItem(item: SyncQueueItem) {
+  queueSyncItem(item: {
+    type: 'ledger_entry' | 'ledger' | 'loan' | 'enterprise';
+    action: 'create' | 'update' | 'delete';
+    data?: any;
+    payload?: any;
+    timestamp?: string;
+  }) {
     const queue = this.getPendingSyncQueue();
-    queue.push(item);
+    queue.push({
+      type: item.type,
+      action: item.action,
+      data: item.data ?? item.payload,
+      payload: item.payload ?? item.data,
+      timestamp: item.timestamp || new Date().toISOString(),
+    });
     this.savePendingSyncQueue(queue);
   }
 

@@ -7,6 +7,7 @@ import {
   generateHyperLocalAdvisory,
   structureLoanDossier,
   parseVoiceTransaction,
+  generateFeasibilityReport,
 } from './server/gemini.js';
 
 dotenv.config();
@@ -286,6 +287,68 @@ app.post('/api/advisory/voice-parse', (req, res) => {
   }
   const parsed = parseVoiceTransaction(transcript);
   res.json(parsed);
+});
+
+// 8. Module 1: Hyper-Local Business Feasibility Report (MoSJE / SCA)
+app.post('/api/feasibility-report', async (req, res) => {
+  try {
+    const { location, category, availableMargin, language } = req.body;
+    const defaultLocation = {
+      village: 'Pipariya Khurd',
+      block: 'Sehore Rural',
+      district: 'Sehore',
+      state: 'Madhya Pradesh',
+    };
+
+    const report = await generateFeasibilityReport(
+      location || defaultLocation,
+      category || 'dairy',
+      Number(availableMargin) || 100000,
+      language || 'en'
+    );
+
+    res.json(report);
+  } catch (err: any) {
+    console.error('Error generating feasibility report:', err);
+    res.status(500).json({ error: err.message || 'Feasibility study failed' });
+  }
+});
+
+// 9. Module 2: Smart Financial Calculator & Scheme Router
+app.post('/api/financial-calculator', (req, res) => {
+  try {
+    const { availableMargin } = req.body;
+    const margin = Math.max(1000, Number(availableMargin) || 100000);
+    const totalProjectCost = Math.round(margin / 0.1);
+    const isMicroFinance = totalProjectCost <= 140000;
+    const selectedScheme = isMicroFinance ? 'micro_finance' : 'term_loan';
+    const schemeName = isMicroFinance
+      ? 'Micro Finance Scheme (MoSJE / SCA Concessional Credit)'
+      : 'Term Loan Scheme (MoSJE / SCA Concessional Credit)';
+    const interestRatePerAnnum = isMicroFinance ? 6.5 : 8.0;
+    const tenureYears = isMicroFinance ? 3 : 7;
+    const tenureMonths = isMicroFinance ? 36 : 84;
+    const moratoriumMonths = isMicroFinance ? 3 : 6;
+    const loanCap = isMicroFinance ? 125000 : 4500000;
+    const maxLoanAmount = Math.min(totalProjectCost * 0.9, loanCap);
+
+    res.json({
+      availableMargin: margin,
+      totalProjectCost,
+      maxLoanAmount,
+      marginPercentage: 10,
+      loanPercentage: 90,
+      selectedScheme,
+      schemeName,
+      interestRatePerAnnum,
+      tenureYears,
+      tenureMonths,
+      moratoriumMonths,
+      activeRepaymentMonths: tenureMonths - moratoriumMonths,
+    });
+  } catch (err: any) {
+    res.status(400).json({ error: 'Calculator calculation error' });
+  }
 });
 
 // Vite middleware setup

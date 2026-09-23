@@ -13,6 +13,9 @@ import {
   AlertCircle,
   Volume2,
   Sparkles,
+  Calendar,
+  X,
+  CreditCard,
 } from 'lucide-react';
 import { LedgerEntry, LanguageCode } from '../types';
 import { UI_TEXT } from '../services/i18n';
@@ -69,7 +72,7 @@ export const BahiKhataLedger: React.FC<BahiKhataLedgerProps> = ({
   // Voice transaction parsing
   const startVoiceInput = () => {
     setIsListening(true);
-    setVoiceFeedback('Listening... Please speak your transaction');
+    setVoiceFeedback(language === 'hi' ? 'सुन रहा हूँ... कृपया लेन-देन बोलें' : 'Listening... Please speak your transaction');
 
     voiceService.startListening(
       language,
@@ -96,9 +99,8 @@ export const BahiKhataLedger: React.FC<BahiKhataLedgerProps> = ({
   };
 
   const parseSpokenTransaction = async (text: string) => {
-    setVoiceFeedback('Processing transaction details...');
+    setVoiceFeedback(language === 'hi' ? 'विवरण पहचाना जा रहा है...' : 'Processing transaction details...');
     try {
-      let parsed = null;
       if (isOnline) {
         const res = await fetch('/api/advisory/voice-parse', {
           method: 'POST',
@@ -106,56 +108,44 @@ export const BahiKhataLedger: React.FC<BahiKhataLedgerProps> = ({
           body: JSON.stringify({ transcript: text }),
         });
         if (res.ok) {
-          parsed = await res.json();
+          const parsed = await res.json();
+          setFormData(prev => ({
+            ...prev,
+            type: parsed.type || prev.type,
+            amount: parsed.amount ? String(parsed.amount) : prev.amount,
+            category: parsed.category || prev.category,
+            partyName: parsed.partyName || prev.partyName,
+            description: parsed.description || text,
+          }));
+          setVoiceFeedback(language === 'hi' ? 'पहचाना गया: राशि एवं विवरण भर दिया गया है।' : 'Extracted: Amount & details filled.');
+          return;
         }
       }
-
-      if (!parsed) {
-        // Local offline parser
-        const lower = text.toLowerCase();
-        const amtMatch = text.match(/\d+/);
-        const amount = amtMatch ? amtMatch[0] : '200';
-        let type: 'cash_in' | 'cash_out' | 'credit_given' = 'cash_in';
-        if (
-          lower.includes('spent') ||
-          lower.includes('bought') ||
-          lower.includes('paid') ||
-          lower.includes('खर्च') ||
-          lower.includes('खरीदा') ||
-          lower.includes('लागत')
-        ) {
-          type = 'cash_out';
-        } else if (
-          lower.includes('credit') ||
-          lower.includes('udhaar') ||
-          lower.includes('उधार') ||
-          lower.includes('बाकी')
-        ) {
-          type = 'credit_given';
-        }
-
-        parsed = {
-          type,
-          amount: Number(amount),
-          category: type === 'cash_in' ? 'Voice Recorded Sale' : 'Voice Recorded Expense',
-          description: text,
-        };
-      }
-
-      setFormData(prev => ({
-        ...prev,
-        type: parsed.type,
-        amount: String(parsed.amount),
-        category: parsed.category || prev.category,
-        description: parsed.description || text,
-        partyName: parsed.partyName || prev.partyName,
-      }));
-
-      setModalOpen(true);
-      setVoiceFeedback(`Parsed ₹${parsed.amount} for ${parsed.type}`);
+      fallbackLocalRegexParse(text);
     } catch {
-      setVoiceFeedback('Could not auto-parse. Please enter manually.');
+      fallbackLocalRegexParse(text);
     }
+  };
+
+  const fallbackLocalRegexParse = (text: string) => {
+    const amountMatch = text.match(/(\d+[\d,]*)/);
+    const amount = amountMatch ? amountMatch[1].replace(/,/g, '') : '';
+
+    let type: 'cash_in' | 'cash_out' | 'credit_given' = 'cash_in';
+    const lower = text.toLowerCase();
+    if (lower.includes('खर्च') || lower.includes('खरीदा') || lower.includes('diya') || lower.includes('expense') || lower.includes('paid')) {
+      type = 'cash_out';
+    } else if (lower.includes('उधार') || lower.includes('udhaar') || lower.includes('credit')) {
+      type = 'credit_given';
+    }
+
+    setFormData(prev => ({
+      ...prev,
+      amount: amount || prev.amount,
+      type,
+      description: text,
+    }));
+    setVoiceFeedback(language === 'hi' ? 'स्थानीय विश्लेषण द्वारा विवरण भरा गया।' : 'Filled via offline voice matcher.');
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -163,12 +153,12 @@ export const BahiKhataLedger: React.FC<BahiKhataLedgerProps> = ({
     if (!formData.amount || Number(formData.amount) <= 0) return;
 
     onAddEntry({
-      enterpriseId: 'current',
+      enterpriseId: 'ent_default_01',
       date: formData.date,
       type: formData.type,
-      category: formData.category || 'General',
+      category: formData.category,
       amount: Number(formData.amount),
-      description: formData.description || 'Quick transaction entry',
+      description: formData.description || `${formData.category} entry`,
       partyName: formData.partyName,
       status: formData.type === 'credit_given' ? 'pending' : 'completed',
     });
@@ -192,391 +182,420 @@ export const BahiKhataLedger: React.FC<BahiKhataLedgerProps> = ({
       {/* Metrics Row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Cash In */}
-        <div className="p-4 rounded-2xl bg-stone-900 border border-stone-800 text-stone-100 shadow-sm flex items-center justify-between">
+        <div className="p-4 rounded-2xl bg-white border border-emerald-200 shadow-sm flex items-center justify-between">
           <div>
-            <span className="text-xs font-medium text-emerald-400 uppercase tracking-wider block">
+            <span className="text-xs font-bold text-emerald-800 uppercase tracking-wider block">
               {t.totalInflow}
             </span>
-            <div className="text-2xl font-bold font-mono text-emerald-400 mt-1">
+            <div className="text-2xl font-bold font-mono text-emerald-700 mt-1">
               ₹{totalInflow.toLocaleString('en-IN')}
             </div>
-            <span className="text-[11px] text-stone-400">Recorded cash sales</span>
+            <span className="text-[11px] text-slate-500">Recorded cash sales</span>
           </div>
-          <div className="w-11 h-11 rounded-xl bg-emerald-950/80 border border-emerald-800/60 text-emerald-400 flex items-center justify-center">
+          <div className="w-11 h-11 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 flex items-center justify-center">
             <ArrowDownLeft className="w-6 h-6" />
           </div>
         </div>
 
         {/* Cash Out */}
-        <div className="p-4 rounded-2xl bg-stone-900 border border-stone-800 text-stone-100 shadow-sm flex items-center justify-between">
+        <div className="p-4 rounded-2xl bg-white border border-rose-200 shadow-sm flex items-center justify-between">
           <div>
-            <span className="text-xs font-medium text-rose-400 uppercase tracking-wider block">
+            <span className="text-xs font-bold text-rose-800 uppercase tracking-wider block">
               {t.totalExpense}
             </span>
-            <div className="text-2xl font-bold font-mono text-rose-400 mt-1">
+            <div className="text-2xl font-bold font-mono text-rose-700 mt-1">
               ₹{totalExpense.toLocaleString('en-IN')}
             </div>
-            <span className="text-[11px] text-stone-400">Raw materials & expenses</span>
+            <span className="text-[11px] text-slate-500">Raw materials & expenses</span>
           </div>
-          <div className="w-11 h-11 rounded-xl bg-rose-950/80 border border-rose-800/60 text-rose-400 flex items-center justify-center">
+          <div className="w-11 h-11 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 flex items-center justify-center">
             <ArrowUpRight className="w-6 h-6" />
           </div>
         </div>
 
         {/* Net Margin */}
-        <div className="p-4 rounded-2xl bg-stone-900 border border-amber-600/30 text-stone-100 shadow-sm flex items-center justify-between">
+        <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-sm flex items-center justify-between">
           <div>
-            <span className="text-xs font-medium text-amber-400 uppercase tracking-wider block">
+            <span className="text-xs font-bold text-slate-600 uppercase tracking-wider block">
               {t.netDailyMargin}
             </span>
-            <div className={`text-2xl font-bold font-mono mt-1 ${netMargin >= 0 ? 'text-amber-400' : 'text-rose-400'}`}>
+            <div className={`text-2xl font-bold font-mono mt-1 ${netMargin >= 0 ? 'text-indigo-700' : 'text-rose-600'}`}>
               ₹{netMargin.toLocaleString('en-IN')}
             </div>
-            <span className="text-[11px] text-stone-400">Inflow minus outflow</span>
+            <span className="text-[11px] text-slate-500">Inflow minus outflow</span>
           </div>
-          <div className="w-11 h-11 rounded-xl bg-amber-950/80 border border-amber-700/60 text-amber-400 flex items-center justify-center">
+          <div className="w-11 h-11 rounded-xl bg-slate-50 border border-slate-200 text-indigo-700 flex items-center justify-center">
             <DollarSign className="w-6 h-6" />
           </div>
         </div>
 
         {/* Customer Udhaar (Credit) */}
-        <div className="p-4 rounded-2xl bg-stone-900 border border-stone-800 text-stone-100 shadow-sm flex items-center justify-between">
+        <div className="p-4 rounded-2xl bg-white border border-amber-200 shadow-sm flex items-center justify-between">
           <div>
-            <span className="text-xs font-medium text-amber-300 uppercase tracking-wider block">
+            <span className="text-xs font-bold text-amber-800 uppercase tracking-wider block">
               {t.pendingCredit}
             </span>
-            <div className="text-2xl font-bold font-mono text-amber-300 mt-1">
+            <div className="text-2xl font-bold font-mono text-amber-700 mt-1">
               ₹{pendingCustomerCredit.toLocaleString('en-IN')}
             </div>
-            <span className="text-[11px] text-stone-400">Customer udhaar to collect</span>
+            <span className="text-[11px] text-slate-500">Uncollected customer credit</span>
           </div>
-          <div className="w-11 h-11 rounded-xl bg-amber-950/40 border border-amber-700/40 text-amber-300 flex items-center justify-center">
+          <div className="w-11 h-11 rounded-xl bg-amber-50 border border-amber-200 text-amber-700 flex items-center justify-center">
             <Clock className="w-6 h-6" />
           </div>
         </div>
       </div>
 
-      {/* Voice Assistant & Quick Actions Bar */}
-      <div className="p-4 sm:p-5 rounded-2xl bg-stone-900 border border-stone-800 text-stone-100 shadow-md">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-          <div className="flex items-center space-x-3">
-            <button
-              id="voice-bahi-khata-mic-btn"
-              onClick={isListening ? stopVoiceInput : startVoiceInput}
-              className={`p-3.5 rounded-full flex items-center justify-center transition-all shadow-lg ${
-                isListening
-                  ? 'bg-rose-600 text-white animate-pulse ring-4 ring-rose-500/40'
-                  : 'bg-amber-600 text-stone-950 hover:bg-amber-500'
-              }`}
-              title="Speak to add transaction"
-            >
-              {isListening ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}
-            </button>
-            <div>
-              <div className="text-sm font-bold flex items-center space-x-2">
-                <span>{t.voiceAddTxn}</span>
-                {isListening && (
-                  <span className="text-xs font-medium text-rose-400 animate-pulse">
-                    ● Recording Voice...
-                  </span>
-                )}
-              </div>
-              <p className="text-xs text-stone-400">{t.exampleVoiceTxn}</p>
-            </div>
-          </div>
-
-          <button
-            id="manual-add-txn-btn"
-            onClick={() => setModalOpen(true)}
-            className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-stone-800 hover:bg-stone-750 text-stone-200 border border-stone-700 text-xs font-semibold flex items-center justify-center space-x-2 transition-colors"
-          >
-            <Plus className="w-4 h-4 text-amber-400" />
-            <span>{t.addTransaction}</span>
-          </button>
-        </div>
-
-        {/* Live Voice Transcript Banner */}
-        {voiceTranscript && (
-          <div className="mt-3 p-3 rounded-xl bg-stone-950 border border-stone-800 text-xs flex items-center justify-between">
-            <span className="text-stone-300 italic truncate max-w-lg">
-              "{voiceTranscript}"
-            </span>
-            <span className="text-amber-400 font-semibold text-[11px] ml-2 shrink-0">
-              {voiceFeedback || 'Voice Recognized'}
-            </span>
-          </div>
-        )}
-      </div>
-
-      {/* Ledger Table / List */}
-      <div className="rounded-2xl bg-stone-900 border border-stone-800 text-stone-100 shadow-md overflow-hidden">
-        <div className="p-4 sm:p-5 border-b border-stone-800 flex items-center justify-between">
+      {/* Action Bar & Transaction Table */}
+      <div className="rounded-2xl bg-white border border-slate-200 shadow-sm overflow-hidden">
+        {/* Table Header Controls */}
+        <div className="p-4 sm:p-5 border-b border-slate-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-slate-50/70">
           <div className="flex items-center space-x-2">
-            <BookOpen className="w-4 h-4 text-amber-400" />
-            <h3 className="text-sm font-bold text-stone-200">
-              Recent Transactions ({entries.length})
+            <BookOpen className="w-5 h-5 text-emerald-700" />
+            <h3 className="font-bold text-sm sm:text-base text-slate-900">
+              {t.bahiKhataTitle}
             </h3>
+            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-slate-200 text-slate-700">
+              {entries.length} entries
+            </span>
           </div>
-          <span className="text-xs text-stone-400">
-            Offline entries sync automatically
-          </span>
+
+          <div className="flex items-center space-x-2 w-full sm:w-auto">
+            <button
+              id="open-ledger-modal-btn"
+              onClick={() => setModalOpen(true)}
+              className="flex-1 sm:flex-none flex items-center justify-center space-x-1.5 px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs sm:text-sm shadow-xs transition-all"
+            >
+              <Plus className="w-4 h-4" />
+              <span>{t.addTransaction}</span>
+            </button>
+          </div>
         </div>
 
+        {/* Entries Table */}
         {entries.length === 0 ? (
-          <div className="p-10 text-center text-stone-400 text-sm">
-            No entries recorded yet. Tap the microphone or click "+ Log Transaction" to record your daily cash flow.
+          <div className="p-12 text-center text-slate-500 space-y-3">
+            <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto text-slate-400">
+              <BookOpen className="w-6 h-6" />
+            </div>
+            <p className="text-xs sm:text-sm">No transactions recorded yet in your digital ledger.</p>
+            <button
+              onClick={() => setModalOpen(true)}
+              className="px-4 py-2 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200 font-bold text-xs hover:bg-emerald-100 transition-colors"
+            >
+              Record First Entry by Voice or Text
+            </button>
           </div>
         ) : (
-          <div className="divide-y divide-stone-800/80 overflow-x-auto">
-            {entries.map(entry => {
-              const isIncome = entry.type === 'cash_in';
-              const isExpense = entry.type === 'cash_out';
-              const isCredit = entry.type === 'credit_given';
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs sm:text-sm">
+              <thead className="bg-slate-100 text-slate-600 uppercase text-[10px] tracking-wider border-b border-slate-200">
+                <tr>
+                  <th className="py-3 px-4">Date</th>
+                  <th className="py-3 px-4">Type</th>
+                  <th className="py-3 px-4">Category & Party</th>
+                  <th className="py-3 px-4">Details</th>
+                  <th className="py-3 px-4 text-right">Amount (₹)</th>
+                  <th className="py-3 px-4 text-center">Status</th>
+                  <th className="py-3 px-4 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {entries.map(entry => {
+                  const isCashIn = entry.type === 'cash_in';
+                  const isExpense = entry.type === 'cash_out';
+                  const isCredit = entry.type === 'credit_given';
 
-              return (
-                <div
-                  key={entry.id}
-                  className="p-4 hover:bg-stone-850/50 transition-colors flex items-center justify-between gap-3 text-xs sm:text-sm"
-                >
-                  {/* Left: Type icon & Details */}
-                  <div className="flex items-start space-x-3 min-w-0">
-                    <div
-                      className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
-                        isIncome
-                          ? 'bg-emerald-950/80 text-emerald-400 border border-emerald-800/60'
-                          : isExpense
-                          ? 'bg-rose-950/80 text-rose-400 border border-rose-800/60'
-                          : 'bg-amber-950/80 text-amber-400 border border-amber-800/60'
-                      }`}
-                    >
-                      {isIncome ? (
-                        <ArrowDownLeft className="w-4 h-4" />
-                      ) : isExpense ? (
-                        <ArrowUpRight className="w-4 h-4" />
-                      ) : (
-                        <Clock className="w-4 h-4" />
-                      )}
-                    </div>
-
-                    <div className="min-w-0">
-                      <div className="flex items-center space-x-2">
-                        <span className="font-semibold text-stone-200 truncate">
-                          {entry.category}
-                        </span>
-                        {entry.partyName && (
-                          <span className="text-stone-400 text-xs px-2 py-0.5 rounded-full bg-stone-800 border border-stone-700 truncate max-w-[140px]">
-                            {entry.partyName}
-                          </span>
-                        )}
-                        {entry.syncStatus === 'local' && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-950 text-amber-300 border border-amber-800">
-                            Offline
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-xs text-stone-400 mt-0.5 truncate max-w-md">
-                        {entry.description}
-                      </div>
-                      <div className="text-[11px] text-stone-500 mt-0.5">
+                  return (
+                    <tr key={entry.id} className="hover:bg-slate-50/80 transition-colors">
+                      <td className="py-3 px-4 text-slate-600 whitespace-nowrap">
                         {entry.date}
-                      </div>
-                    </div>
-                  </div>
+                      </td>
 
-                  {/* Right: Amount and Actions */}
-                  <div className="flex items-center space-x-3 shrink-0">
-                    <div className="text-right">
-                      <div
-                        className={`font-mono font-bold text-sm sm:text-base ${
-                          isIncome
-                            ? 'text-emerald-400'
-                            : isExpense
-                            ? 'text-rose-400'
-                            : 'text-amber-400'
-                        }`}
-                      >
-                        {isIncome ? '+' : isExpense ? '-' : ''}₹
-                        {entry.amount.toLocaleString('en-IN')}
-                      </div>
-                      {isCredit && (
-                        <div className="text-[11px]">
-                          {entry.status === 'pending' ? (
-                            <span className="text-amber-400 font-medium">
-                              Pending Udhaar
-                            </span>
-                          ) : (
-                            <span className="text-emerald-400 font-medium">
-                              Recovered
-                            </span>
-                          )}
-                        </div>
-                      )}
-                    </div>
+                      <td className="py-3 px-4">
+                        {isCashIn && (
+                          <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                            <ArrowDownLeft className="w-3 h-3" />
+                            <span>{t.cashIn}</span>
+                          </span>
+                        )}
+                        {isExpense && (
+                          <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800 border border-rose-200">
+                            <ArrowUpRight className="w-3 h-3" />
+                            <span>{t.cashOut}</span>
+                          </span>
+                        )}
+                        {isCredit && (
+                          <span className="inline-flex items-center space-x-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                            <Clock className="w-3 h-3" />
+                            <span>{t.creditGiven}</span>
+                          </span>
+                        )}
+                      </td>
 
-                    {isCredit && entry.status === 'pending' && (
-                      <button
-                        id={`mark-settled-btn-${entry.id}`}
-                        onClick={() => onMarkCreditSettled(entry.id)}
-                        className="px-2.5 py-1 rounded-md bg-emerald-950/80 hover:bg-emerald-900 border border-emerald-700 text-emerald-300 text-xs font-medium transition-colors"
-                        title="Mark Udhaar collected / settled"
-                      >
-                        Paid
-                      </button>
-                    )}
+                      <td className="py-3 px-4">
+                        <div className="font-bold text-slate-800">{entry.category}</div>
+                        {entry.partyName && (
+                          <div className="text-[11px] text-slate-500 font-medium">
+                            Party: {entry.partyName}
+                          </div>
+                        )}
+                      </td>
 
-                    <button
-                      id={`delete-ledger-entry-${entry.id}`}
-                      onClick={() => onDeleteEntry(entry.id)}
-                      className="p-1.5 rounded-lg text-stone-500 hover:text-rose-400 hover:bg-stone-800 transition-colors"
-                      title="Delete entry"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
+                      <td className="py-3 px-4 text-slate-600 max-w-xs truncate">
+                        {entry.description}
+                      </td>
+
+                      <td className="py-3 px-4 text-right font-mono font-bold whitespace-nowrap">
+                        <span
+                          className={
+                            isCashIn
+                              ? 'text-emerald-700'
+                              : isExpense
+                              ? 'text-rose-700'
+                              : 'text-amber-700'
+                          }
+                        >
+                          {isCashIn ? '+' : isExpense ? '-' : ''}₹
+                          {entry.amount.toLocaleString('en-IN')}
+                        </span>
+                      </td>
+
+                      <td className="py-3 px-4 text-center whitespace-nowrap">
+                        {entry.status === 'completed' ? (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700">
+                            Settled
+                          </span>
+                        ) : (
+                          <button
+                            id={`settle-credit-btn-${entry.id}`}
+                            onClick={() => onMarkCreditSettled(entry.id)}
+                            className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300 hover:bg-emerald-100 hover:text-emerald-900 hover:border-emerald-300 transition-colors"
+                            title="Click to mark customer credit as collected"
+                          >
+                            Pending (Mark Received)
+                          </button>
+                        )}
+                      </td>
+
+                      <td className="py-3 px-4 text-right whitespace-nowrap">
+                        <button
+                          id={`delete-entry-btn-${entry.id}`}
+                          onClick={() => onDeleteEntry(entry.id)}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                          title="Delete entry"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
 
-      {/* Manual Entry Modal */}
+      {/* Add Transaction Modal */}
       {modalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-stone-950/70 backdrop-blur-sm animate-fadeIn">
-          <div className="bg-stone-900 border border-stone-800 text-stone-100 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden">
-            <div className="px-5 py-4 border-b border-stone-800 flex items-center justify-between">
-              <h3 className="text-sm font-bold text-stone-100">
-                Log New Ledger Entry
-              </h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-fadeIn">
+          <div className="bg-white border border-slate-200 text-slate-800 rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/80">
+              <div className="flex items-center space-x-2">
+                <div className="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold">
+                  <Plus className="w-4 h-4 text-emerald-700" />
+                </div>
+                <h3 className="font-bold text-base text-slate-900">
+                  {t.addTransaction}
+                </h3>
+              </div>
               <button
+                id="close-add-tx-modal-btn"
                 onClick={() => setModalOpen(false)}
-                className="text-stone-400 hover:text-stone-200"
+                className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
               >
-                ✕
+                <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-5 space-y-4">
-              {/* Type selector */}
-              <div className="grid grid-cols-3 gap-2">
-                <button
-                  type="button"
-                  id="entry-type-cash-in"
-                  onClick={() => setFormData({ ...formData, type: 'cash_in' })}
-                  className={`py-2 rounded-xl text-xs font-bold border transition-colors ${
-                    formData.type === 'cash_in'
-                      ? 'bg-emerald-600 text-stone-950 border-emerald-500'
-                      : 'bg-stone-800 border-stone-700 text-stone-300'
-                  }`}
-                >
-                  + Cash In
-                </button>
-                <button
-                  type="button"
-                  id="entry-type-cash-out"
-                  onClick={() => setFormData({ ...formData, type: 'cash_out' })}
-                  className={`py-2 rounded-xl text-xs font-bold border transition-colors ${
-                    formData.type === 'cash_out'
-                      ? 'bg-rose-600 text-stone-950 border-rose-500'
-                      : 'bg-stone-800 border-stone-700 text-stone-300'
-                  }`}
-                >
-                  - Cash Out
-                </button>
-                <button
-                  type="button"
-                  id="entry-type-credit-given"
-                  onClick={() => setFormData({ ...formData, type: 'credit_given' })}
-                  className={`py-2 rounded-xl text-xs font-bold border transition-colors ${
-                    formData.type === 'credit_given'
-                      ? 'bg-amber-600 text-stone-950 border-amber-500'
-                      : 'bg-stone-800 border-stone-700 text-stone-300'
-                  }`}
-                >
-                  Udhaar (Credit)
-                </button>
+            {/* Voice Input Section in Modal */}
+            <div className="p-5 border-b border-slate-100 bg-emerald-50/40">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-bold text-emerald-900 flex items-center space-x-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>Voice Auto-Fill (बोलकर दर्ज करें)</span>
+                </span>
+                <span className="text-[11px] text-emerald-700 font-medium">Multi-lingual AI</span>
               </div>
 
-              {/* Amount */}
+              <div className="flex items-center space-x-2">
+                <button
+                  type="button"
+                  id="modal-voice-record-btn"
+                  onClick={isListening ? stopVoiceInput : startVoiceInput}
+                  className={`p-3 rounded-xl flex items-center justify-center transition-all ${
+                    isListening
+                      ? 'bg-rose-600 text-white animate-pulse ring-4 ring-rose-500/20'
+                      : 'bg-emerald-700 hover:bg-emerald-800 text-white'
+                  }`}
+                  title="Click to speak transaction"
+                >
+                  {isListening ? <MicOff className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
+                </button>
+                <div className="flex-1 text-xs">
+                  <div className="font-medium text-slate-800">
+                    {voiceTranscript || (language === 'hi' ? 'उदा: "रमेश को 500 रुपये का दूध उधार दिया" या "2000 रुपये का गेहूं बिका"' : 'e.g., "Sold 2000 rupees of milk" or "Bought cattle feed 800"')}
+                  </div>
+                  {voiceFeedback && (
+                    <div className="text-[11px] text-emerald-700 mt-0.5 font-semibold">
+                      {voiceFeedback}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Form */}
+            <form onSubmit={handleSubmit} className="p-6 space-y-4">
+              {/* Type Switcher */}
               <div>
-                <label className="block text-xs font-semibold text-stone-300 mb-1">
-                  Amount (₹)
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  Transaction Type
                 </label>
-                <div className="relative">
-                  <span className="absolute left-3 top-2 text-stone-400 text-base">₹</span>
-                  <input
-                    type="number"
-                    required
-                    id="ledger-amount-input"
-                    value={formData.amount}
-                    onChange={e => setFormData({ ...formData, amount: e.target.value })}
-                    className="w-full pl-8 pr-3 py-2 rounded-xl bg-stone-800 border border-stone-700 text-lg font-mono font-bold text-stone-100 focus:outline-none focus:border-amber-500"
-                    placeholder="500"
-                    autoFocus
-                  />
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, type: 'cash_in' })}
+                    className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all ${
+                      formData.type === 'cash_in'
+                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                        : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    + {t.cashIn}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, type: 'cash_out' })}
+                    className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all ${
+                      formData.type === 'cash_out'
+                        ? 'bg-rose-600 text-white border-rose-600 shadow-xs'
+                        : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    - {t.cashOut}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFormData({ ...formData, type: 'credit_given' })}
+                    className={`py-2 px-3 rounded-xl text-xs font-bold border transition-all ${
+                      formData.type === 'credit_given'
+                        ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
+                        : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    ⏱ {t.creditGiven}
+                  </button>
                 </div>
               </div>
 
-              {/* Category & Party Name */}
+              {/* Amount and Category */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-stone-300 mb-1">
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Amount (₹) *
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3.5 top-2.5 text-slate-400 font-bold">₹</span>
+                    <input
+                      type="number"
+                      required
+                      id="tx-amount-input"
+                      value={formData.amount}
+                      onChange={e => setFormData({ ...formData, amount: e.target.value })}
+                      placeholder="1500"
+                      className="w-full pl-8 pr-3 py-2 rounded-xl border border-slate-300 text-sm font-bold font-mono text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
                     Category
                   </label>
                   <input
                     type="text"
-                    id="ledger-category-input"
+                    id="tx-category-input"
                     value={formData.category}
                     onChange={e => setFormData({ ...formData, category: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl bg-stone-800 border border-stone-700 text-xs text-stone-100 focus:outline-none focus:border-amber-500"
-                    placeholder="e.g. Milk Sale, Feed"
+                    placeholder="e.g. Daily Milk Sales"
+                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
                   />
                 </div>
+              </div>
+
+              {/* Party Name & Date */}
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-stone-300 mb-1">
-                    Customer / Party
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Customer / Trader Name
                   </label>
                   <input
                     type="text"
-                    id="ledger-party-input"
+                    id="tx-party-input"
                     value={formData.partyName}
                     onChange={e => setFormData({ ...formData, partyName: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl bg-stone-800 border border-stone-700 text-xs text-stone-100 focus:outline-none focus:border-amber-500"
-                    placeholder="Optional Name"
+                    placeholder="Optional (e.g. Ramesh)"
+                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Date
+                  </label>
+                  <input
+                    type="date"
+                    id="tx-date-input"
+                    value={formData.date}
+                    onChange={e => setFormData({ ...formData, date: e.target.value })}
+                    className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
                   />
                 </div>
               </div>
 
               {/* Description */}
               <div>
-                <label className="block text-xs font-semibold text-stone-300 mb-1">
-                  Description / Note
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Notes / Description
                 </label>
-                <textarea
-                  id="ledger-desc-input"
-                  rows={2}
+                <input
+                  type="text"
+                  id="tx-desc-input"
                   value={formData.description}
                   onChange={e => setFormData({ ...formData, description: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl bg-stone-800 border border-stone-700 text-xs text-stone-100 focus:outline-none focus:border-amber-500"
-                  placeholder="Details of the sale or expense..."
+                  placeholder="e.g. 30L evening milk delivery"
+                  className="w-full px-3.5 py-2 rounded-xl border border-slate-300 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600"
                 />
               </div>
 
-              {/* Submit */}
-              <div className="flex justify-end space-x-3 pt-2">
+              {/* Submit Buttons */}
+              <div className="flex justify-end space-x-3 pt-3">
                 <button
                   type="button"
                   onClick={() => setModalOpen(false)}
-                  className="px-4 py-2 rounded-xl border border-stone-700 text-xs text-stone-300 hover:bg-stone-800"
+                  className="px-4 py-2 rounded-xl border border-slate-300 text-xs font-semibold text-slate-700 hover:bg-slate-100 transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  id="save-ledger-entry-btn"
-                  className="px-5 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-stone-950 font-bold text-xs shadow-md transition-colors"
+                  id="submit-transaction-btn"
+                  className="px-5 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold transition-all shadow-xs"
                 >
-                  Save Entry
+                  Save Transaction
                 </button>
               </div>
             </form>
